@@ -432,9 +432,29 @@ function resolveCandidatePath(raw, workingDir) {
   const absoluteRaw = /^[A-Za-z]:\//.test(posix) || posix.startsWith('/');
   const absolute = absoluteRaw
     ? posix
-    : (workingDir ? toPosixPath(path.resolve(String(workingDir), posix)) : posix);
+    : (workingDir ? joinRoot(normalizeRoot(workingDir), posix) : posix);
   const relative = absoluteRaw ? '' : posix.replace(/^\.\//, '').replace(/^\/+/, '');
   return { absolute, relative, absoluteRaw };
+}
+
+/**
+ * Canonicalise a project root without letting the host platform reinterpret a
+ * Windows drive path. `path.resolve('C:/repo')` on Linux prepends the runner's
+ * cwd, which used to break file relativisation for sessions recorded on Windows.
+ */
+function normalizeRoot(value) {
+  const posix = toPosixPath(String(value ?? '')).trim();
+  if (!posix) return '';
+  if (/^[A-Za-z]:\//.test(posix) || posix.startsWith('/')) {
+    return posix.replace(/\/+$/, '');
+  }
+  return toPosixPath(path.resolve(posix)).replace(/\/+$/, '');
+}
+
+function joinRoot(root, relative) {
+  const tail = toPosixPath(relative).replace(/^\.?\//, '');
+  if (!root) return tail;
+  return `${root.replace(/\/+$/, '')}/${tail}`;
 }
 
 function isUnder(file, root) {
@@ -450,7 +470,7 @@ function isUnder(file, root) {
  */
 function finalizeFiles(candidates, workingDir) {
   if (!candidates.length) return [];
-  const workingRoot = workingDir ? toPosixPath(path.resolve(String(workingDir))) : '';
+  const workingRoot = workingDir ? normalizeRoot(workingDir) : '';
   const rootCounts = new Map();
   const resolved = [];
 
