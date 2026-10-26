@@ -31,6 +31,18 @@ node bin/recall.js --help
 
 يعمل على Windows وmacOS وLinux. لا يحتاج صلاحيات خاصة.
 
+### Windows (بدون npm link)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-windows.ps1
+```
+
+يضيف `recall` إلى PATH للمستخدم الحالي ويطبع كتلة MCP الجاهزة. البديل المباشر:
+
+```bat
+bin\recall.cmd --help
+```
+
 ## البدء السريع
 
 ```sh
