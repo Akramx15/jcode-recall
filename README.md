@@ -1,5 +1,9 @@
 # jcode-recall
 
+[![ci](https://github.com/Akramx15/jcode-recall/actions/workflows/ci.yml/badge.svg)](https://github.com/Akramx15/jcode-recall/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![node: 20+](https://img.shields.io/badge/node-20%2B-brightgreen.svg)](package.json)
+
 طبقة ذاكرة دائمة وبقاء للسياق (context survival) لوكلاء البرمجة: Jcode Desktop وClaude Code وCodex وopencode.
 بدون أي اعتماديات وقت التشغيل، بدون شبكة، وبدون استدعاءات LLM. ملفات JSONL محلية فقط.
 
