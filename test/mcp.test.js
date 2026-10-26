@@ -32,7 +32,7 @@ test('initialize advertises the 2024-11-05 protocol and tools capability', () =>
   assert.match(response.result.instructions, /recall_resume/);
 });
 
-test('tools/list returns the eight documented tools with schemas', () => {
+test('tools/list returns the nine documented tools with schemas', () => {
   const h = makeHarness();
   const response = handleMessage({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, sessionFor(h));
   const names = response.result.tools.map((tool) => tool.name).sort();
@@ -40,6 +40,7 @@ test('tools/list returns the eight documented tools with schemas', () => {
     'recall_brief',
     'recall_checkpoint',
     'recall_forget',
+    'recall_import_session',
     'recall_pin',
     'recall_remember',
     'recall_resume',
@@ -184,6 +185,6 @@ test('stdio framing handles split chunks, CRLF and multiple messages', async () 
   const byId = new Map(lines.filter((line) => line.id !== undefined && line.id !== null).map((line) => [line.id, line]));
   assert.equal(byId.get(1).result.protocolVersion, '2024-11-05');
   assert.match(byId.get(2).result.content[0].text, /remembered/);
-  assert.equal(byId.get(3).result.tools.length, 8);
+  assert.equal(byId.get(3).result.tools.length, 9);
   assert.ok(lines.some((line) => line.error && line.error.code === -32700), 'parse error reported');
 });

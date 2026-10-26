@@ -42,6 +42,12 @@ import {
 } from './render.js';
 import { normalizeHandoffObject, parseMessagesInput } from './checkpoint.js';
 import { runMcp } from './mcp.js';
+import {
+  defaultSessionsDir,
+  formatImportSummary,
+  importSessions,
+  watchSessions,
+} from './import.js';
 
 const HELP = `recall ${VERSION} - durable memory and context survival for coding agents
 
@@ -95,6 +101,20 @@ CONTEXT SURVIVAL
       --all
 
 AGENT INTEGRATION
+  import-session [path]          import a Jcode snapshot, journal or directory
+      --dir PATH                 sessions directory (default: ~/.jcode/sessions)
+      --project PATH|NAME        attribute every record to this project
+      --all                      ignore the project filter (directory scans)
+      --since DAYS               only files modified in the last DAYS
+      --json                     machine-readable output
+  autosave                       import changed Jcode sessions once
+      --once                     one pass (default)
+      --watch                    keep polling until Ctrl+C
+      --interval SECONDS         poll interval for --watch (default 30)
+      --dir PATH                 sessions directory
+      --project PATH|NAME        attribute every record to this project
+      --all                      import every project, not just this one
+      --since DAYS               modify window (default 7 with --once/--watch)
   mcp                            MCP 2024-11-05 server over stdio (newline JSON-RPC)
   hook session-start             print the resume briefing (for SessionStart hooks)
   hook pre-compact               save a checkpoint from stdin/transcript, print ack
@@ -172,6 +192,12 @@ function stringFlag(flags, name) {
   if (typeof value === 'string') return value;
   if (typeof value === 'number') return String(value);
   return '';
+}
+
+function optionalDays(flags) {
+  if (flags.since === undefined) return undefined;
+  const value = Number.parseFloat(String(flags.since));
+  return Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 function collectExplicit(flags, cwd) {
@@ -494,6 +520,59 @@ export async function main(argv, options = {}) {
         return 0;
       }
 
+      case 'import-session': {
+        const targetPath = args.join(' ').trim();
+        const result = await importSessions(session, {
+          path: targetPath || undefined,
+          dir: stringFlag(flags, 'dir') || undefined,
+          project: stringFlag(flags, 'project') || undefined,
+          all: flagOn(flags, 'all'),
+          sinceDays: optionalDays(flags),
+        });
+        if (flagOn(flags, 'json')) {
+          out(`${JSON.stringify(result, null, 2)}\n`);
+        } else {
+          out(`${formatImportSummary(result)}\n`);
+        }
+        for (const error of result.errors || []) err(`recall: import warning: ${error}\n`);
+        return 0;
+      }
+
+      case 'autosave': {
+        const watch = flagOn(flags, 'watch') && !flagOn(flags, 'once');
+        const options = {
+          scope: 'project',
+          dir: stringFlag(flags, 'dir') || undefined,
+          project: stringFlag(flags, 'project') || undefined,
+          all: flagOn(flags, 'all'),
+          sinceDays: optionalDays(flags),
+        };
+        if (!watch) {
+          const result = await importSessions(session, options);
+          if (flagOn(flags, 'json')) out(`${JSON.stringify(result, null, 2)}\n`);
+          else out(`${formatImportSummary(result)}\n`);
+          for (const error of result.errors || []) err(`recall: import warning: ${error}\n`);
+          return 0;
+        }
+
+        const seconds = Number.parseFloat(String(flags.interval ?? '30'));
+        const intervalMs = Number.isFinite(seconds) && seconds > 0 ? Math.max(10, Math.round(seconds * 1000)) : 30000;
+        const dirLabel = options.dir || defaultSessionsDir(env);
+        out(`recall: autosave watching ${dirLabel} every ${intervalMs / 1000}s (Ctrl+C to stop)\n`);
+        const final = await watchSessions(session, {
+          ...options,
+          intervalMs,
+          handleSignals: true,
+          onTick: (result) => out(`${formatImportSummary(result)}\n`),
+        });
+        if (final.busy) {
+          err('recall: another autosave is already running; nothing imported\n');
+          return 1;
+        }
+        out('recall: autosave stopped\n');
+        return 0;
+      }
+
       case 'resume': {
         const budget = parsePositiveInt(flags.budget, 1200);
         const result = resume(session, {
@@ -507,6 +586,7 @@ export async function main(argv, options = {}) {
             budget,
             approxTokens: estimateTokens(result.text),
             count: result.records.length,
+            fallback: result.fallback || null,
             text: result.text,
           }, null, 2)}\n`);
         } else {

@@ -23,6 +23,7 @@ import {
   renderStats,
 } from './render.js';
 import { normalizeHandoffObject } from './checkpoint.js';
+import { formatImportSummary, importSessionsSync } from './import.js';
 import { oneLine, truncateChars } from './util.js';
 
 const INSTRUCTIONS = [
@@ -30,6 +31,8 @@ const INSTRUCTIONS = [
   'On session start call recall_resume to load pinned facts and the latest checkpoint.',
   'Before context compaction call recall_checkpoint with a goal, decisions and next steps.',
   'When unsure about a past decision call recall_search instead of guessing.',
+  'If resume shows another project, verify the path before acting.',
+  'Run `recall autosave --watch` (or a scheduled `recall autosave --once`) so compaction cannot lose a session.',
   'Never store secrets, tokens or credentials.',
   'Keep entries short and include the rationale for decisions.',
 ].join('\n');
@@ -153,6 +156,21 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: { project: { type: 'string' } },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'recall_import_session',
+    description: 'Import a Jcode session snapshot, journal or sessions directory into memory. Idempotent: repeats do not duplicate records. Imported content is unverified. One checkpoint per session, at most 40 preferences.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Session .json, .journal.jsonl, or directory.' },
+        dir: { type: 'string', description: 'Sessions directory (default: ~/.jcode/sessions).' },
+        project: { type: 'string', description: 'Attribute all imported records to this project (path or name).' },
+        all: { type: 'boolean', description: 'Import every project instead of only the current one.' },
+        since: { type: 'number', description: 'Only files modified in the last N days (0 = no limit).' },
+      },
       additionalProperties: false,
     },
   },
@@ -319,6 +337,25 @@ function callTool(name, args, session) {
     case 'recall_stats': {
       const result = stats(session, { project: asString(args.project, 'project') || undefined });
       return textResult(renderStats(result.summary, result.diagnostics));
+    }
+
+    case 'recall_import_session': {
+      const pathArg = asString(args.path, 'path') || undefined;
+      const dirArg = asString(args.dir, 'dir') || undefined;
+      const result = importSessionsSync(session, {
+        path: pathArg,
+        dir: dirArg,
+        project: asString(args.project, 'project') || undefined,
+        all: asBool(args.all),
+        sinceDays: args.since === undefined ? undefined : asInt(args.since, 0, 'since'),
+        scope: !pathArg && !dirArg ? 'project' : undefined,
+      });
+      const lines = [formatImportSummary(result)];
+      if (result.errors && result.errors.length) {
+        lines.push(...result.errors.slice(0, 5).map((error) => `warning: ${error}`));
+      }
+      lines.push('Imported session content is unverified; confirm files and tests before acting on it.');
+      return textResult(lines.join('\n'));
     }
 
     default:

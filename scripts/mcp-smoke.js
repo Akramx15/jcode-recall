@@ -15,6 +15,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(ROOT, 'bin', 'recall.js');
 const HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'recall-smoke-'));
 const CWD = fs.mkdtempSync(path.join(os.tmpdir(), 'recall-smoke-project-'));
+const SESSIONS = fs.mkdtempSync(path.join(os.tmpdir(), 'recall-smoke-sessions-'));
 
 const child = spawn(process.execPath, [BIN, 'mcp'], {
   cwd: CWD,
@@ -98,12 +99,13 @@ try {
   check('initialize server name', () => assert.equal(init.serverInfo.name, 'jcode-recall'));
 
   const tools = await send('tools/list', {});
-  check('tools/list count', () => assert.equal(tools.tools.length, 8));
+  check('tools/list count', () => assert.equal(tools.tools.length, 9));
   check('tools/list names', () => {
     const names = tools.tools.map((tool) => tool.name);
     assert.ok(names.includes('recall_remember'));
     assert.ok(names.includes('recall_resume'));
     assert.ok(names.includes('recall_checkpoint'));
+    assert.ok(names.includes('recall_import_session'));
   });
 
   const remember = await send('tools/call', {
@@ -133,6 +135,19 @@ try {
   const stats = await send('tools/call', { name: 'recall_stats', arguments: {} });
   check('stats works', () => assert.match(textOf(stats), /records:/));
 
+  fs.writeFileSync(path.join(SESSIONS, 'session_smoke_1_aaa.json'), JSON.stringify({
+    id: 'session_smoke_1_aaa',
+    title: 'smoke import',
+    working_dir: CWD,
+    messages: [{ id: 'm1', role: 'user', content: [{ type: 'text', text: 'Import this smoke session' }] }],
+  }), 'utf8');
+  const imported = await send('tools/call', {
+    name: 'recall_import_session',
+    arguments: { dir: SESSIONS },
+  });
+  check('import session works', () => assert.match(textOf(imported), /imported 1 session\(s\), 1 checkpoint\(s\)/));
+  check('import marks content unverified', () => assert.match(textOf(imported), /unverified/));
+
   const ping = await send('ping', {});
   check('ping returns empty result', () => assert.deepEqual(ping, {}));
 
@@ -146,10 +161,12 @@ try {
   process.stdout.write(`\nMCP smoke: ${checks} checks passed\n`);
   fs.rmSync(HOME, { recursive: true, force: true });
   fs.rmSync(CWD, { recursive: true, force: true });
+  fs.rmSync(SESSIONS, { recursive: true, force: true });
   process.exit(0);
 } catch (error) {
   process.stderr.write(`\nMCP smoke FAILED after ${checks} checks: ${error && error.stack ? error.stack : error}\n`);
   if (stderrText.trim()) process.stderr.write(`server stderr:\n${stderrText}\n`);
   try { child.kill(); } catch { /* ignore */ }
+  try { fs.rmSync(SESSIONS, { recursive: true, force: true }); } catch { /* ignore */ }
   process.exit(1);
 }

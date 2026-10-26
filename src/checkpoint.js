@@ -211,7 +211,7 @@ function addUnique(list, value, seen) {
   list.push(clean);
 }
 
-function commandStatus(result, isError) {
+export function commandStatus(result, isError) {
   if (isError) return 'fail';
   const text = oneLine(result).toLowerCase();
   if (!text) return 'unknown';
@@ -360,14 +360,25 @@ export function mergeHandoff(extracted, explicit = {}) {
     if (values.length) data[key] = [...values, ...data[key].filter((v) => !values.some((x) => looseKey(x) === looseKey(v)))].slice(0, MAX_ITEMS);
   }
   if (explicit.goal) data.goal = truncateChars(oneLine(explicit.goal), MAX_TEXT);
+  if (explicit.objectiveNow) data.objectiveNow = truncateChars(oneLine(explicit.objectiveNow), 600);
   if (explicit.summary) data.summary = String(explicit.summary).trim().slice(0, 4000);
   if (Array.isArray(explicit.commands) && explicit.commands.length) {
-    const provided = explicit.commands.map((command) => ({
-      command: truncateChars(oneLine(command), 200),
-      tool: 'flag',
-      result: '',
-      status: 'unknown',
-    }));
+    const provided = explicit.commands.map((command) => {
+      if (command && typeof command === 'object' && typeof command.command === 'string') {
+        return {
+          command: truncateChars(oneLine(command.command), 200),
+          tool: typeof command.tool === 'string' ? command.tool : 'flag',
+          result: truncateChars(oneLine(command.result || ''), 300),
+          status: typeof command.status === 'string' ? command.status : 'unknown',
+        };
+      }
+      return {
+        command: truncateChars(oneLine(command), 200),
+        tool: 'flag',
+        result: '',
+        status: 'unknown',
+      };
+    });
     data.commands = [...provided, ...data.commands].slice(0, MAX_ITEMS);
   }
   return data;
@@ -398,6 +409,9 @@ export function normalizeHandoffObject(obj) {
   };
   return {
     goal: typeof pick('goal', 'objective', 'task') === 'string' ? String(pick('goal', 'objective', 'task')).trim() : '',
+    objectiveNow: typeof pick('objective_now', 'objectiveNow', 'current_objective') === 'string'
+      ? String(pick('objective_now', 'objectiveNow', 'current_objective')).trim()
+      : '',
     summary: typeof pick('summary', 'overview') === 'string' ? String(pick('summary', 'overview')).trim() : '',
     constraints: stringArray(pick('constraints', 'requirements')),
     decisions: stringArray(pick('decisions', 'choices')),
@@ -414,6 +428,7 @@ export function checkpointText(data, { project = null, stats = null } = {}) {
   const lines = [];
   if (project) lines.push(`Project: ${project}`);
   if (data.goal) lines.push(`Goal: ${data.goal}`);
+  if (data.objectiveNow) lines.push(`Objective now: ${data.objectiveNow}`);
   if (data.constraints.length) lines.push(`Constraints: ${data.constraints.join(' | ')}`);
   if (data.decisions.length) lines.push(`Decisions: ${data.decisions.join(' | ')}`);
   if (data.files.length) lines.push(`Files touched: ${data.files.join(' | ')}`);
@@ -433,7 +448,7 @@ export function checkpointText(data, { project = null, stats = null } = {}) {
 export function hasSignal(data) {
   return Boolean(
     data
-    && (data.goal || data.summary
+    && (data.goal || data.objectiveNow || data.summary
       || data.constraints.length || data.decisions.length || data.files.length
       || data.commands.length || data.openQuestions.length || data.nextSteps.length || data.blockers.length),
   );

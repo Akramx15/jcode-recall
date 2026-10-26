@@ -29,7 +29,7 @@ import {
 } from './checkpoint.js';
 import { limitResults, rankRecords, visibleRecords } from './rank.js';
 import { renderResume } from './render.js';
-import { ensureDir, parsePositiveInt } from './util.js';
+import { ensureDir, parsePositiveInt, toPosixPath } from './util.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -49,9 +49,23 @@ function contextFor(session, flags = {}) {
   return resolveContext(flags, { env: session.env, cwd: session.cwd });
 }
 
+/** Explicit project provenance wins over the session cwd. */
+function withProjectOverrides(ctx, options = {}) {
+  if (typeof options.projectPath === 'string' && options.projectPath.trim()) {
+    ctx.projectPath = toPosixPath(options.projectPath.trim());
+  }
+  if (typeof options.projectKey === 'string' && options.projectKey.trim()) {
+    ctx.projectKey = options.projectKey.trim();
+  }
+  if (typeof options.projectLabel === 'string' && options.projectLabel.trim()) {
+    ctx.project = options.projectLabel.trim();
+  }
+  return ctx;
+}
+
 /** Store one memory. Refuses likely secrets unless `force` is set. */
 export function remember(session, options = {}) {
-  const ctx = contextFor(session, options);
+  const ctx = withProjectOverrides(contextFor(session, options), options);
   const text = String(options.text ?? '').trim();
   if (!text) throw new RecallError('text is required (pass it as an argument or with --stdin)', 'ETEXT');
 
@@ -159,7 +173,7 @@ export function brief(session, options = {}) {
  * `raw` is transcript text (JSON/JSONL/prose); `explicit` overrides extraction.
  */
 export function checkpoint(session, options = {}) {
-  const ctx = contextFor(session, options);
+  const ctx = withProjectOverrides(contextFor(session, options), options);
   const extracted = extractHandoff(options.raw || '', { project: ctx.project });
   let data = mergeHandoff(extracted.data, options.explicit || {});
 
@@ -205,16 +219,40 @@ export function resume(session, options = {}) {
     ? projectSelector(options.project, { cwd: session.cwd, env: session.env })
     : (options.all ? null : { key: ctx.projectKey });
   const loaded = loadAllRecords(ctx.home);
-  const records = selector ? loaded.records.filter((record) => recordMatches(record, selector)) : loaded.records;
-  const displayProject = options.all
+  let records = selector ? loaded.records.filter((record) => recordMatches(record, selector)) : loaded.records;
+  let displayProject = options.all
     ? 'all'
     : (selector && selector.label ? selector.label : ctx.project);
-  const showPaths = Boolean(options.project);
+  let showPaths = Boolean(options.project);
+  let projectPath = selector && selector.key === ctx.projectKey ? ctx.projectPath : null;
+  let fallback = null;
+
+  // Jcode Desktop can launch with cwd set to an install folder even when the
+  // work belongs to another repo. If this project has nothing visible, show the
+  // single most recently active other project instead of a misleading empty
+  // briefing. Never mix projects and never fire for an explicit --project/--all.
+  if (!options.project && !options.all) {
+    const visibleCurrent = visibleRecords(records, { includeSuperseded: false });
+    if (!visibleCurrent.length) {
+      const target = findMostRecentOtherProject(loaded.records, ctx.projectKey);
+      if (target) {
+        records = loaded.records.filter((record) => !record.supersededBy && recordKey(record) === target.key);
+        displayProject = target.label;
+        projectPath = target.path;
+        showPaths = true;
+        fallback = {
+          fromProject: ctx.project,
+          toProject: target.label,
+          toPath: target.path,
+        };
+      }
+    }
+  }
 
   return {
     text: renderResume({
       project: displayProject,
-      projectPath: selector && selector.key === ctx.projectKey ? ctx.projectPath : null,
+      projectPath,
       records,
       budget: parsePositiveInt(options.budget, 1200),
       now: session.now.getTime(),
@@ -222,11 +260,36 @@ export function resume(session, options = {}) {
       showPaths,
       showProject: true,
       explicitProject: Boolean(options.project),
+      fallback,
     }),
     records,
     project: displayProject,
+    fallback,
     home: ctx.home,
   };
+}
+
+function findMostRecentOtherProject(records, currentKey) {
+  let best = null;
+  for (const record of records) {
+    if (!record || record.supersededBy) continue;
+    if (record.project === 'global') continue;
+    const key = recordKey(record);
+    if (!key || key === currentKey || key === 'global') continue;
+    const ts = new Date(record.ts).getTime();
+    if (!Number.isFinite(ts)) continue;
+    const pathValue = record.projectPath
+      || (/^(?:\/|[A-Za-z]:)/.test(key) ? key : '');
+    if (!best || ts > best.ts) {
+      best = {
+        key,
+        label: record.project,
+        path: pathValue,
+        ts,
+      };
+    }
+  }
+  return best;
 }
 
 export function setPinned(session, id, pinned) {

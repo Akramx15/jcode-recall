@@ -13,6 +13,7 @@ Thumbs.db
 coverage/
 tmp/
 .tmp/
+.tmp-*
 *.tmp
 
 # Local memory data if someone points RECALL_HOME into the repo

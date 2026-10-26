@@ -1,6 +1,6 @@
 # Agent protocol
 
-The exact protocol, six lines. Follow it literally.
+The exact protocol, seven lines. Follow it literally.
 
 ```text
 1. On session start, call recall_resume before doing anything else.
@@ -9,6 +9,7 @@ The exact protocol, six lines. Follow it literally.
 4. Never store secrets, credentials, tokens or private keys.
 5. Store decisions together with their rationale.
 6. Keep every entry short and specific.
+7. If resume says it is showing another project, verify the path before acting.
 ```
 
 ## Why each line exists
@@ -35,6 +36,28 @@ who might otherwise undo the decision.
 **6. Short entries.** Retrieval and budgets work on compact records. One fact or decision per record.
 Prefer 200 characters over 2000. Put long material in files and reference the paths.
 
+**7. Verify a fallback project.** Jcode Desktop sometimes starts the agent from an app install
+folder rather than the repository root. When the current project has no memory, `recall_resume`
+shows the most recently active other project and prints `_No memory for ...; showing ..._`.
+That is a hint, not a fact about the current directory. Check the shown `@path` before editing.
+
+## Zero-effort capture
+
+Automate the handoff so a forgotten `recall_checkpoint` cannot lose a session:
+
+```sh
+recall autosave --watch              # background watcher, Ctrl+C to stop
+recall autosave --once               # or run this from a scheduler
+```
+
+The importer reads `~/.jcode/sessions`, writes one checkpoint per session (later journal appends
+update that checkpoint), imports explicit user preferences only, ignores `reasoning` blocks and
+redacts secrets before writing. By default it keeps the current project (from the session's
+`working_dir`) and files modified in the last 7 days; `--all` covers every project and
+`--since DAYS` changes the window. Imported content is marked `unverified`: confirm files and
+tests before acting. The agent should still call `recall_checkpoint` for decisions it made
+in-context, because local reasoning never reaches the transcript.
+
 ## Tool mapping
 
 | Moment | MCP tool | CLI equivalent |
@@ -45,6 +68,7 @@ Prefer 200 characters over 2000. Put long material in files and reference the pa
 | New task | `recall_brief` | `recall brief "<task>"` |
 | Important fact | `recall_remember` + `recall_pin` | `recall remember ...` + `recall pin <id>` |
 | End of session | `recall_stats` (optional) | `recall stats` or `recall hook stop` |
+| Zero-effort capture | `recall_import_session` (or background autosave) | `recall autosave --watch` / `--once` |
 
 ## Minimum viable usage
 

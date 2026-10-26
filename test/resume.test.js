@@ -88,3 +88,23 @@ test('resume with no data prints a helpful hint', async () => {
   assert.equal(result.code, 0);
   assert.match(result.out, /No memories for this project yet/);
 });
+
+test('resume keeps the checkpoint goal visible at tight budgets', async () => {
+  const h = makeHarness();
+  await runCli([
+    'checkpoint',
+    '--goal', 'Ship the authentication refactor without regressing RTL caret selection',
+    '--decision', 'Use argon2 instead of bcrypt because the security review requires it',
+    '--file', 'src/auth/login.js',
+    '--command', 'npm test',
+    '--next', 'Write integration tests for the caret and selection paths',
+  ], h);
+
+  for (const budget of [120, 250, 400, 700]) {
+    const result = await runCli(['resume', '--budget', String(budget)], h);
+    assert.equal(result.code, 0, result.err);
+    assert.match(result.out, /Ship the authentication refactor/, `budget ${budget} lost the goal`);
+    assert.match(result.out, /unverified/, `budget ${budget} lost the unverified marker`);
+    assert.ok(tokens(result.out) <= budget, `resume budget ${budget} exceeded: ${tokens(result.out)}`);
+  }
+});

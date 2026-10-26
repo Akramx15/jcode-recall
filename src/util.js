@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-export const VERSION = '1.0.0';
+export const VERSION = '1.1.0';
 export const PROTOCOL_VERSION = '2024-11-05';
 
 /** Boolean flags never consume the following argv element as a value. */
@@ -29,6 +29,8 @@ const BOOLEAN_FLAGS = new Set([
   'offline',
   'no-extract',
   'print',
+  'once',
+  'watch',
 ]);
 
 /** Flags that may appear multiple times and collect every value. */

@@ -23,6 +23,9 @@ export function createBudget(budgetTokens) {
     get used() {
       return estimateTokens(text);
     },
+    remaining() {
+      return Math.max(0, budget - estimateTokens(text));
+    },
     fits(candidate) {
       return estimateTokens(text + candidate) <= budget;
     },
@@ -173,6 +176,7 @@ export function renderCheckpointBody(data) {
   };
 
   if (data.goal) lines.push(`- **Goal:** ${data.goal}`);
+  if (data.objectiveNow) lines.push(`- **Objective now:** ${data.objectiveNow}`);
   pushList('Constraints', data.constraints);
   pushList('Decisions', data.decisions);
   pushList('Files', data.files);
@@ -192,6 +196,18 @@ export function renderCheckpointBody(data) {
   pushList('Blockers', data.blockers);
   if (data.summary) lines.push(`- **Summary:** ${truncateChars(oneLine(data.summary), 400)}`);
   return lines.length ? `${lines.join('\n')}\n` : '';
+}
+
+/** One compact line for very small budgets: the goal and the next step. */
+function compactCheckpoint(data, maxTokens) {
+  if (!data || typeof data !== 'object') return '';
+  const parts = [];
+  if (data.goal) parts.push(`Goal: ${truncateChars(oneLine(data.goal), 140)}`);
+  if (Array.isArray(data.nextSteps) && data.nextSteps.length) {
+    parts.push(`Next: ${truncateChars(oneLine(data.nextSteps[0]), 110)}`);
+  }
+  if (!parts.length) return '';
+  return truncateToBudget(`- ${parts.join(' · ')}\n`, Math.max(8, maxTokens));
 }
 
 function latestCheckpoint(records) {
@@ -224,6 +240,7 @@ export function renderResume({
   showPaths = false,
   showProject = false,
   explicitProject = false,
+  fallback = null,
 }) {
   const builder = createBudget(budget);
   const visible = records.filter((r) => !r.supersededBy);
@@ -244,6 +261,10 @@ export function renderResume({
   const header = `# recall briefing: ${project || 'all'}\n`;
   const meta = `_${plural(visible.length, 'memory', 'memories')} · generated ${formatDate(new Date(now).toISOString())}${home ? ` · home ${home}` : ''} · budget ${budget} tokens_\n`;
   if (!builder.tryAdd(header)) return builder.finish();
+  if (fallback) {
+    const where = fallback.toPath ? ` (${fallback.toPath})` : '';
+    builder.tryAdd(`_No memory for ${fallback.fromProject}; showing the most recent project ${fallback.toProject}${where}. Pass --project to choose._\n`);
+  }
   if (!builder.tryAdd(meta)) return builder.finish();
   if (projectPath) builder.tryAdd(`_project path: ${projectPath}_\n`);
   if (explicitProject && showPaths) builder.tryAdd('_showing records matched by project label; `@path` shows mixed provenance._\n');
@@ -261,13 +282,32 @@ export function renderResume({
     const stale = age > 7 ? ` · **stale: ${Math.floor(age)}d old**` : '';
     const head = `\n## Latest checkpoint · \`${checkpoint.id}\` · ${formatDate(checkpoint.ts)} · **unverified**${stale}\n`;
     if (builder.tryAdd(head)) {
-      const body = renderCheckpointBody(checkpoint.data);
-      if (body) {
-        builder.tryAdd(body);
-        builder.tryAdd('_Checkpoint reflects the session at that moment. Re-verify files and tests before acting on it._\n');
+      const footer = '_Checkpoint reflects the session at that moment. Re-verify files and tests before acting on it._\n';
+      const body = renderCheckpointBody(checkpoint.data)
+        || `${truncateChars(oneLine(checkpoint.text), 400)}\n`;
+      const remaining = builder.remaining();
+      const footerTokens = estimateTokens(footer);
+      const bodyBudget = Math.max(0, remaining - footerTokens);
+
+      let rendered = '';
+      if (budget < 120) {
+        rendered = compactCheckpoint(checkpoint.data, bodyBudget);
+      } else if (estimateTokens(body) <= bodyBudget) {
+        rendered = body;
       } else {
-        builder.tryAdd(`${truncateChars(oneLine(checkpoint.text), 400)}\n`);
+        const maxChars = Math.max(0, (bodyBudget * 4) - 2);
+        rendered = maxChars > 1
+          ? truncateChars(body, maxChars)
+          : compactCheckpoint(checkpoint.data, bodyBudget);
       }
+
+      if (rendered) {
+        if (!rendered.endsWith('\n')) rendered += '\n';
+        builder.tryAdd(rendered);
+      }
+      // The footer carries the "re-verify" warning; add it even when the body
+      // had to be truncated, because the head still says unverified.
+      builder.tryAdd(footer);
     }
   } else {
     builder.tryAdd('\n## Latest checkpoint\n_None yet. Before context compaction, run `recall checkpoint` (or `recall hook pre-compact`)._\n');

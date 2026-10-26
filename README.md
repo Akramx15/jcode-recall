@@ -67,6 +67,13 @@ recall resume --budget 900
 
 # سياق جاهز للصق من أجل مهمة محددة
 recall brief "أضف إعادة المحاولة إلى عامل المهام"
+
+# المسار بدون جهد: استورد جلسات Jcode تلقائيا
+recall autosave --once        # مرة واحدة (مناسبة لجدولة المهام)
+recall autosave --watch       # راقب ~/.jcode/sessions حتى Ctrl+C
+
+# أو استورد ملفا أو مجلدا محددا
+recall import-session ~/.jcode/sessions
 ```
 
 قراءة النص من stdin:
@@ -112,6 +119,10 @@ echo "المشروع يستخدم pnpm وليس npm" | recall remember --stdin -
 
 ثم تحقق عبر `jcode mcp test recall`.
 
+إذا شغّل Jcode Desktop الوكيل من مجلد تثبيت التطبيق بدلا من جذر المستودع، فإن `recall_resume`
+يعرض تلقائيا أحدث مشروع آخر لديه ذاكرة، مع سطر تحذير واضح و`@path` للمسار. لا يخلط بين مشروعين،
+ولا يعمل هذا الاحتياط إذا مررت `--project` أو `--all`. تحقق من المسار قبل تنفيذ أي إجراء.
+
 ### Claude Code
 
 ```sh
@@ -136,10 +147,17 @@ claude mcp list
 | `recall_pin` | تثبيت أو إلغاء تثبيت سجل |
 | `recall_forget` | حذف سجل (tombstone في ملف append-only) |
 | `recall_stats` | إحصاءات وتشخيص الملفات |
+| `recall_import_session` | استيراد جلسة Jcode (snapshot أو journal أو مجلد) بشكل متكرر الآمن |
 
 كل أداة تعيد `content: [{type: "text", text: ...}]`. لا يكتب الخادم أي شيء إلى stdout غير JSON-RPC.
 
 ## سير العمل عندما يمتلئ السياق
+
+**المسار بدون جهد (موصى به):** شغّل `recall autosave --watch` في الخلفية، أو جدولا دوريا
+يشغّل `recall autosave --once`. يستورد هذا المسار الجلسات المتغيرة من `~/.jcode/sessions`
+ويحفظ checkpoint لكل جلسة حتى لو نسي الوكيل استدعاء `recall_checkpoint`. افتراضيا يقتصر على
+مشروعك الحالي (حسب `working_dir` في الجلسة) وعلى ملفات آخر 7 أيام؛ استخدم `--all` لكل المشاريع
+و`--since <أيام>` لتوسيع النافذة. كل محتوى مستورد موسوم `unverified`.
 
 1. **عند بداية الجلسة**: يستدعي الوكيل `recall_resume` أو يشغّل hook `session-start`.
 2. **قبل الضغط**: يستدعي `recall_checkpoint` بالهدف والقيود والقرارات والملفات والأوامر
@@ -189,6 +207,9 @@ recall stats [--project X] [--json]
 recall export --format md|json [--out FILE] [--project X]
 recall doctor [--json]
 recall mcp
+recall import-session [path] [--dir PATH] [--project PATH|NAME] [--all] [--since DAYS] [--json]
+recall autosave [--once|--watch] [--interval SECONDS] [--dir PATH]
+                [--project PATH|NAME] [--all] [--since DAYS]
 recall hook session-start | pre-compact | stop
 ```
 
@@ -203,6 +224,8 @@ recall hook session-start | pre-compact | stop
 - `--project <name>` يطابق الأسماء عبر المشاريع، ويعرض `@path` لكل سجل حتى ترى المصدر.
 - `--global` يكتب في `global.jsonl` المشترك عمدا (قواعد المؤسسة مثلا). يظهر في الموجز
   موسوما بـ `global`.
+- عند استيراد جلسة، مفتاح المشروع مشتق من `working_dir` داخل الجلسة (وليس من مجلد تشغيل
+  الأمر)، ويُحفظ المسار كـ provenance. مرر `--project` لإسناد كل السجلات إلى مشروع محدد.
 
 ## التخزين
 
@@ -232,6 +255,7 @@ recall hook session-start | pre-compact | stop
 - لا اتصال بالشبكة ولا استدعاء لنموذج لغوي. كل شيء محلي وحتمي.
 - `remember` يرفض النصوص التي تشبه الأسرار (مفاتيح، كلمات مرور، رموز) إلا مع `--force`.
 - الـ checkpoint ينقّي الأسرار تلقائيا ويستبدلها بـ `[redacted:...]` قبل الكتابة.
+- المستورد يتجاهل كتل `reasoning` تماما، ويقصّ مخرجات الأدوات، ويطبق التنقيح قبل أي كتابة.
 - لا يجمع المشروع أي telemetry.
 - البيانات غير مشفرة على القرص. اعتمد على تشفير القرص وصلاحيات المستخدم.
 - استخدم `recall export` للنسخ الاحتياطي، و`recall forget` للحذف المنطقي.
@@ -247,6 +271,8 @@ src/text.js          تطبيع عربي/Unicode وتقطيع
 src/rank.js          BM25 + تعزيزات
 src/render.js        كتل Markdown ضمن ميزانية توكنات
 src/checkpoint.js    استخراج حتمي من الـ transcript
+src/session.js       تحليل جلسات Jcode واستخراج الحقائق
+src/import.js        سجل الاستيراد، القفل، والمراقبة التلقائية
 src/mcp.js           خادم MCP عبر stdio
 test/                اختبارات node:test
 scripts/mcp-smoke.js اختبار دخان كامل عبر pipe
@@ -258,6 +284,9 @@ scripts/mcp-smoke.js اختبار دخان كامل عبر pipe
 node --test
 node scripts/mcp-smoke.js
 ```
+
+المجموعة الحالية 87 اختبارا (بالإضافة إلى فحص دخان MCP). يوصى بتشغيل
+`recall autosave --watch` أو جدولة `recall autosave --once` حتى لا تفقد الجلسة عند الضغط.
 
 الاختبارات تستخدم `RECALL_HOME` مؤقتا ولا تلمس بياناتك. تغطي: التطبيع العربي، الترتيب،
 ميزانية التوكنات، الجولة الكاملة للـ checkpoint، الموجز، MCP عبر pipe، الأسطر التالفة،
@@ -328,6 +357,13 @@ recall checkpoint --goal "finish login" \
 recall resume --budget 900
 
 recall brief "add retry logic to the worker"
+
+# Zero-effort path: import Jcode sessions automatically
+recall autosave --once        # one pass (good for a scheduler)
+recall autosave --watch       # poll ~/.jcode/sessions until Ctrl+C
+
+# Or import one file or a directory
+recall import-session ~/.jcode/sessions
 ```
 
 Reading from stdin:
@@ -373,6 +409,11 @@ If `recall` is on PATH:
 
 Verify with `jcode mcp test recall`.
 
+If Jcode Desktop launches the agent from an app install folder instead of the repository
+root, `recall_resume` shows the most recently active other project with a clear warning line
+and its `@path`. It never mixes two projects, and it does not fire when `--project` or
+`--all` was passed. Verify the path before acting.
+
 ### Claude Code
 
 ```sh
@@ -393,11 +434,19 @@ Or add the same `mcpServers` block to `.mcp.json` at the project root. Verify wi
 | `recall_pin` | pin or unpin a record |
 | `recall_forget` | delete a record (append-only tombstone) |
 | `recall_stats` | store statistics and file diagnostics |
+| `recall_import_session` | import a Jcode snapshot, journal or sessions directory (idempotent) |
 
 Every tool returns `content: [{type: "text", text: ...}]`. Nothing except JSON-RPC is
 written to stdout.
 
 ## When your context fills
+
+**Zero-effort path (recommended):** run `recall autosave --watch` in the background, or a
+scheduled `recall autosave --once`. It imports changed sessions from `~/.jcode/sessions` and
+writes one checkpoint per session even if the agent forgets `recall_checkpoint`. By default it
+stays within your current project (derived from the session's `working_dir`) and files modified
+in the last 7 days; use `--all` for every project and `--since <days>` to widen the window.
+Imported content is marked `unverified`.
 
 1. **Session start**: the agent calls `recall_resume` or runs the `session-start` hook.
 2. **Before compaction**: the agent calls `recall_checkpoint` with the goal, constraints,
@@ -448,6 +497,9 @@ recall stats [--project X] [--json]
 recall export --format md|json [--out FILE] [--project X]
 recall doctor [--json]
 recall mcp
+recall import-session [path] [--dir PATH] [--project PATH|NAME] [--all] [--since DAYS] [--json]
+recall autosave [--once|--watch] [--interval SECONDS] [--dir PATH]
+                [--project PATH|NAME] [--all] [--since DAYS]
 recall hook session-start | pre-compact | stop
 ```
 
@@ -463,6 +515,9 @@ recall hook session-start | pre-compact | stop
   provenance stays visible.
 - `--global` writes to the shared `global.jsonl` on purpose (for organisation-wide rules). Global
   records are marked `global` in briefings.
+- When importing a session, the project key comes from the session's `working_dir`, not the
+  directory the command was run from, and the path is kept as provenance. Pass `--project` to
+  attribute every imported record to one project.
 
 ## Storage
 
@@ -493,6 +548,8 @@ lines without throwing.
 - No network access and no LLM calls. Everything is local and deterministic.
 - `remember` refuses secret-looking text (keys, passwords, tokens) unless `--force` is given.
 - Checkpoints redact secrets automatically to `[redacted:...]` before writing.
+- The importer ignores `reasoning` blocks entirely, truncates tool output, and redacts before
+  any write.
 - No telemetry is collected.
 - Data is not encrypted at rest. Rely on full-disk encryption and OS user permissions.
 - Use `recall export` for backups and `recall forget` for logical deletion.
@@ -508,6 +565,8 @@ src/text.js          Arabic/Unicode normalization and tokenization
 src/rank.js          BM25 plus boosts
 src/render.js        budgeted Markdown blocks
 src/checkpoint.js    deterministic transcript extraction
+src/session.js       Jcode session parsing and deterministic facts
+src/import.js        import ledger, single-process lock, autosave watcher
 src/mcp.js           stdio MCP server
 test/                node:test suites
 scripts/mcp-smoke.js end-to-end pipe smoke test
@@ -523,6 +582,9 @@ Design rationale and the sources behind it: [`docs/DESIGN.md`](docs/DESIGN.md),
 node --test
 node scripts/mcp-smoke.js
 ```
+
+The current suite has 87 tests (plus the MCP smoke run). Run `recall autosave --watch`, or
+schedule `recall autosave --once`, so a compaction cannot lose the session.
 
 Tests use a temporary `RECALL_HOME` and never touch your data. They cover Arabic normalization,
 ranking, token budgets, the full checkpoint round trip, resume, MCP over a pipe, malformed JSONL,
