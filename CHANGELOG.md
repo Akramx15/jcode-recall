@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.2
+
+- Fix session file attribution on Linux/macOS when the transcript was recorded on
+  Windows: probing `C:/...` with posix `path.resolve` could find the current
+  checkout's `.git` and attach the file to the wrong project. Windows drive paths are
+  no longer probed on posix hosts, and a tie between inferred roots keeps the
+  session's own `working_dir`.
+
 ## 1.1.1
 
 - Windows zero-effort capture: `scripts/install-windows.ps1 -Autosave` registers a

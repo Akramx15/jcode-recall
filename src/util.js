@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-export const VERSION = '1.1.1';
+export const VERSION = '1.1.2';
 export const PROTOCOL_VERSION = '2024-11-05';
 
 /** Boolean flags never consume the following argv element as a value. */

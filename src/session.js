@@ -362,6 +362,12 @@ function userPromptTexts(message) {
 }
 
 function findRepoRoot(filePath) {
+  // A Windows drive path cannot be probed on a case-sensitive posix host:
+  // path.resolve would prepend the runner's cwd and then find *its* .git,
+  // mis-attributing the session to the current checkout.
+  if (process.platform !== 'win32' && /^[A-Za-z]:\//.test(toPosixPath(filePath))) {
+    return '';
+  }
   let dir = path.dirname(path.resolve(String(filePath)));
   for (let depth = 0; depth < 40; depth += 1) {
     try {
@@ -490,7 +496,9 @@ function finalizeFiles(candidates, workingDir) {
   let projectRoot = workingRoot;
   let bestCount = 0;
   for (const [root, count] of rootCounts) {
-    if (count > bestCount || (count === bestCount && root.length > projectRoot.length)) {
+    // Ties keep the session's own working directory; a longer incidental root
+    // must not win and steal files from the right project.
+    if (count > bestCount) {
       projectRoot = root;
       bestCount = count;
     }
