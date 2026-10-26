@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { handleMessage } from '../src/mcp.js';
 import { createSession } from '../src/service.js';
 import { watchSessions } from '../src/import.js';
+import { canonicalKey } from '../src/store.js';
 import { makeHarness, runCli } from './helpers.js';
 
 const BIN = fileURLToPath(new URL('../bin/recall.js', import.meta.url));
@@ -166,7 +167,9 @@ test('--project attributes every imported session to the requested project', asy
   assert.equal(result.code, 0, result.err);
   const records = await listRecords(h);
   assert.equal(records.length, 1);
-  assert.equal(records[0].projectKey, h.cwd.toLowerCase().replace(/\\/g, '/'));
+  // `canonicalKey` lowercases only on Windows, where the filesystem is
+  // case-insensitive; Linux and macOS keep the real case.
+  assert.equal(records[0].projectKey, canonicalKey(h.cwd));
   assert.match(records[0].text, /Launcher cwd session/);
 });
 
