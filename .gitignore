@@ -1,0 +1,20 @@
+# Dependencies (there are none at runtime; kept for safety)
+node_modules/
+
+# Logs and temp artifacts
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Local editor / tooling
+.vscode/
+.idea/
+coverage/
+tmp/
+.tmp/
+*.tmp
+
+# Local memory data if someone points RECALL_HOME into the repo
+.recall/
+*.lock

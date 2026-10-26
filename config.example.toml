@@ -1,0 +1,18 @@
+# Example MCP configuration (TOML, Codex-style).
+# Jcode uses JSON instead: see ~/.jcode/mcp.json in README.md.
+# Claude Code can use `claude mcp add recall -- node <path>/bin/recall.js mcp`.
+
+[mcp_servers.recall]
+command = "node"
+args = ["C:\\Users\\You\\jcode-recall\\bin\\recall.js", "mcp"]
+startup_timeout_sec = 20
+tool_timeout_sec = 30
+
+[mcp_servers.recall.env]
+RECALL_HOME = "C:\\Users\\You\\.jcode\\recall"
+
+# If `recall` is on PATH you can drop the absolute path:
+#
+# [mcp_servers.recall]
+# command = "recall"
+# args = ["mcp"]

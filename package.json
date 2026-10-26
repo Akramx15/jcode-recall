@@ -1,0 +1,51 @@
+{
+  "name": "jcode-recall",
+  "version": "1.0.0",
+  "description": "Durable memory and context-survival layer for coding agents. Zero dependencies, deterministic, local-first.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "recall": "bin/recall.js"
+  },
+  "main": "src/cli.js",
+  "exports": {
+    ".": "./src/cli.js",
+    "./store": "./src/store.js",
+    "./mcp": "./src/mcp.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "docs",
+    "scripts",
+    "README.md",
+    "LICENSE",
+    "hooks.example.json",
+    "config.example.toml"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "smoke": "node scripts/mcp-smoke.js",
+    "doctor": "node bin/recall.js doctor"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "memory",
+    "context",
+    "agent",
+    "mcp",
+    "claude-code",
+    "codex",
+    "jcode",
+    "opencode",
+    "bm25",
+    "jsonl"
+  ],
+  "os": [
+    "win32",
+    "darwin",
+    "linux"
+  ]
+}
