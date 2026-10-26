@@ -43,6 +43,44 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-windows.ps1
 bin\recall.cmd --help
 ```
 
+### التشغيل التلقائي على Windows
+
+لتفعيل الاستيراد التلقائي بدون تشغيل watcher يدويا، شغّل من مستودع jcode-recall:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-windows.ps1 -Autosave
+```
+
+يسجل هذا الأمر مهمة مجدولة لكل مستخدم باسم `jcode-recall-autosave` تعمل عند تسجيل الدخول ثم
+كل 15 دقيقة بالأمر:
+
+```text
+"<node.exe>" "<repo>\bin\recall.js" autosave --once --all --since 7
+```
+
+- كل جلسة تُنسب إلى مشروعها من `working_dir`، لذلك تستورد المهمة كل مشروع لمسه الوكيل خلال
+  آخر 7 أيام، لكل مشروع ملفه المستقل. مجلد العمل يُستخدم فقط عندما لا تحمل الجلسة مسارا.
+- توسم كل شيء مستورد بـ `unverified` حتى يراجع الوكيل الملفات والاختبارات قبل الاعتماد عليه.
+- لا تحتاج صلاحيات مدير، ولا تعدل `~/.jcode/config.toml` ولا ملف MCP.
+- الوكيل يظل مطالبا باستدعاء `recall_checkpoint` للقرارات التي اتخذها داخل السياق، لأن التفكير
+  المحلي لا يصل إلى الـ transcript.
+
+لإيقاف المهمة فقط:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-windows.ps1 -RemoveAutosave
+```
+
+ولإزالة كل شيء (shim والمهمة ومسار PATH) مع إبقاء بياناتك:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-windows.ps1 -DryRun  # معاينة فقط
+powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-windows.ps1
+```
+
+بديل: إن كنت تفضل `--watch` طويل العمر بدون نافذة، ضع `scripts\autosave-hidden.vbs` (أو اختصارا
+له) في مجلد `shell:startup` بدلا من المهمة المجدولة.
+
 ## البدء السريع
 
 ```sh
@@ -285,8 +323,9 @@ node --test
 node scripts/mcp-smoke.js
 ```
 
-المجموعة الحالية 87 اختبارا (بالإضافة إلى فحص دخان MCP). يوصى بتشغيل
-`recall autosave --watch` أو جدولة `recall autosave --once` حتى لا تفقد الجلسة عند الضغط.
+المجموعة الحالية 90 اختبارا (بالإضافة إلى فحص دخان MCP). يوصى بتشغيل
+`recall autosave --watch` أو جدولة `recall autosave --once` (أو `install-windows.ps1 -Autosave`
+على Windows) حتى لا تفقد الجلسة عند الضغط.
 
 الاختبارات تستخدم `RECALL_HOME` مؤقتا ولا تلمس بياناتك. تغطي: التطبيع العربي، الترتيب،
 ميزانية التوكنات، الجولة الكاملة للـ checkpoint، الموجز، MCP عبر pipe، الأسطر التالفة،
@@ -338,6 +377,46 @@ node bin/recall.js --help
 ```
 
 Works on Windows, macOS and Linux. No special permissions required.
+
+### Automatic capture on Windows
+
+To make zero-effort capture actually run without starting a watcher yourself:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-windows.ps1 -Autosave
+```
+
+This registers a per-user Scheduled Task named `jcode-recall-autosave` that runs at logon and
+every 15 minutes:
+
+```text
+"<node.exe>" "<repo>\bin\recall.js" autosave --once --since 7
+```
+
+- It runs in the working directory you installed from. To capture another project, pass
+  `-WorkingDirectory C:\work\app` (or run the script by its full path from that project root).
+- It imports every project touched in the last 7 days (one memory file per project) and marks everything
+  `unverified`.
+- No admin rights are needed, and it never edits `~/.jcode/config.toml` or your MCP file.
+- The agent should still call `recall_checkpoint` for decisions made in-context, because local
+  reasoning never reaches the transcript.
+
+Stop the task only:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-windows.ps1 -RemoveAutosave
+```
+
+Remove everything (shim, task and PATH entry) while keeping your data:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-windows.ps1 -DryRun  # preview only
+powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-windows.ps1
+```
+
+Alternative: if you prefer a long-lived `--watch` with no console window, put
+`scripts\autosave-hidden.vbs` (or a shortcut to it) in your `shell:startup` folder instead of
+using the scheduled task.
 
 ## Quick start
 
@@ -583,13 +662,14 @@ node --test
 node scripts/mcp-smoke.js
 ```
 
-The current suite has 87 tests (plus the MCP smoke run). Run `recall autosave --watch`, or
-schedule `recall autosave --once`, so a compaction cannot lose the session.
+The current suite has 90 tests (plus the MCP smoke run). Run `recall autosave --watch`, or
+schedule `recall autosave --once` (or use `install-windows.ps1 -Autosave` on Windows), so a
+compaction cannot lose the session.
 
 Tests use a temporary `RECALL_HOME` and never touch your data. They cover Arabic normalization,
 ranking, token budgets, the full checkpoint round trip, resume, MCP over a pipe, malformed JSONL,
-project isolation (two directories with the same basename), and concurrent appends from multiple
-processes.
+project isolation (two directories with the same basename), concurrent appends from multiple
+processes, and the Windows installer's autosave wiring (parsed, dry-run only, no real task).
 
 ## Limitations
 

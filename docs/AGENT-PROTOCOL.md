@@ -58,6 +58,16 @@ redacts secrets before writing. By default it keeps the current project (from th
 tests before acting. The agent should still call `recall_checkpoint` for decisions it made
 in-context, because local reasoning never reaches the transcript.
 
+On Windows, opt into a per-user Scheduled Task instead of starting a watcher by hand:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-windows.ps1 -Autosave
+```
+
+It runs `autosave --once --since 7` at logon and every 15 minutes with no admin rights. Stop it
+with `-RemoveAutosave`; remove the shim and task with `scripts\uninstall-windows.ps1 -DryRun`
+first, then without `-DryRun`.
+
 ## Tool mapping
 
 | Moment | MCP tool | CLI equivalent |

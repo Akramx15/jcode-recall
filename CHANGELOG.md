@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.1
+
+- Windows zero-effort capture: `scripts/install-windows.ps1 -Autosave` registers a
+  per-user Scheduled Task (`jcode-recall-autosave`) that runs
+  `autosave --once --all --since 7` every 15 minutes, with no admin rights and no
+  console window. `-RemoveAutosave` stops it.
+- `scripts/uninstall-windows.ps1` removes the shim, PATH entry and task, reports (never
+  deletes) the memory directory, and supports `-DryRun`.
+- `scripts/autosave-hidden.vbs` runs a hidden watcher for users who prefer Startup.
+- README and `docs/AGENT-PROTOCOL.md` document the automatic path. 90 tests.
+
 ## 1.1.0
 
 Automatic capture from Jcode sessions.
